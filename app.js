@@ -101,6 +101,7 @@ const PALETTES = {
 
 let currentData = null;
 let simulation = null;
+let zoomRef = null;
 
 // === GitHub API ===
 async function fetchWithRetry(url, retries = MAX_RETRIES) {
@@ -362,6 +363,9 @@ function renderConstellation(processed, connections) {
     .filter(c => nodes.find(n => n.id === c.source) && nodes.find(n => n.id === c.target))
     .map(c => ({ source: c.source, target: c.target, type: c.type }));
 
+  // Reset zoom
+  svg.transition().duration(300).call(zoomRef.transform, d3.zoomIdentity);
+
   // Calculate positions based on layout
   if (layout === 'radial') {
     const centerX = width / 2;
@@ -478,20 +482,21 @@ function renderConstellation(processed, connections) {
       node.attr('transform', d => `translate(${d.x},${d.y})`);
     });
   } else {
-    // Animate entrance
+    // Set positions BEFORE animation
+    link
+      .attr('x1', d => typeof d.source === 'object' ? d.source.x : (nodes.find(n => n.id === d.source)?.x || 0))
+      .attr('y1', d => typeof d.source === 'object' ? d.source.y : (nodes.find(n => n.id === d.source)?.y || 0))
+      .attr('x2', d => typeof d.target === 'object' ? d.target.x : (nodes.find(n => n.id === d.target)?.x || 0))
+      .attr('y2', d => typeof d.target === 'object' ? d.target.y : (nodes.find(n => n.id === d.target)?.y || 0));
+
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+
+    // Animate entrance (fade in, not transform)
     node.attr('opacity', 0)
       .transition()
       .duration(800)
       .delay((d, i) => i * 5)
       .attr('opacity', 1);
-
-    link
-      .attr('x1', d => nodes.find(n => n.id === d.source)?.x || 0)
-      .attr('y1', d => nodes.find(n => n.id === d.source)?.y || 0)
-      .attr('x2', d => nodes.find(n => n.id === d.target)?.x || 0)
-      .attr('y2', d => nodes.find(n => n.id === d.target)?.y || 0);
-
-    node.attr('transform', d => `translate(${d.x},${d.y})`);
   }
 
   // Zoom & pan on main group
@@ -502,6 +507,7 @@ function renderConstellation(processed, connections) {
     });
 
   svg.call(zoom);
+  zoomRef = zoom;
 
   // Update legend
   updateLegend(colorMode, nodes);
