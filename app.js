@@ -363,8 +363,10 @@ function renderConstellation(processed, connections) {
     .filter(c => nodes.find(n => n.id === c.source) && nodes.find(n => n.id === c.target))
     .map(c => ({ source: c.source, target: c.target, type: c.type }));
 
-  // Reset zoom
-  svg.transition().duration(300).call(zoomRef.transform, d3.zoomIdentity);
+  // Reset zoom (only if zoom was previously initialized)
+  if (zoomRef) {
+    svg.transition().duration(300).call(zoomRef.transform, d3.zoomIdentity);
+  }
 
   // Calculate positions based on layout
   if (layout === 'radial') {
