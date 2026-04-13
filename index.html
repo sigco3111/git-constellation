@@ -22,6 +22,18 @@
           <span class="btn-text">생성</span>
         </button>
       </div>
+      <div class="token-section">
+        <div class="token-toggle" onclick="toggleTokenInput()">
+          <span id="tokenToggleIcon">🔒</span>
+          <span id="tokenToggleText">Private 레포 액세스</span>
+        </div>
+        <div class="token-input-wrap" id="tokenWrap" style="display:none;">
+          <input type="password" id="tokenInput" placeholder="GitHub Personal Access Token (ghp_...)" />
+          <button class="token-btn" onclick="saveToken()">저장</button>
+          <button class="token-btn token-clear" onclick="clearToken()">삭제</button>
+        </div>
+        <div class="token-status" id="tokenStatus"></div>
+      </div>
       <div class="options">
         <div class="option-group">
           <label>기간</label>

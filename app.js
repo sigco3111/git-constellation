@@ -4,6 +4,61 @@
 const GITHUB_API = 'https://api.github.com';
 const MAX_COMMITS = 500;
 const MAX_RETRIES = 3;
+const TOKEN_KEY = 'git_constellation_token';
+
+// === Token Management ===
+function getStoredToken() {
+  return localStorage.getItem(TOKEN_KEY) || '';
+}
+
+function toggleTokenInput() {
+  const wrap = document.getElementById('tokenWrap');
+  const icon = document.getElementById('tokenToggleIcon');
+  const text = document.getElementById('tokenToggleText');
+  const isHidden = wrap.style.display === 'none';
+
+  wrap.style.display = isHidden ? 'flex' : 'none';
+  icon.textContent = isHidden ? '🔓' : '🔒';
+
+  if (isHidden) {
+    const token = getStoredToken();
+    document.getElementById('tokenInput').value = token;
+    if (token) updateTokenStatus(true);
+  }
+}
+
+function saveToken() {
+  const token = document.getElementById('tokenInput').value.trim();
+  if (!token) return;
+  localStorage.setItem(TOKEN_KEY, token);
+  updateTokenStatus(true);
+  document.getElementById('tokenInput').value = '';
+  document.getElementById('tokenInput').placeholder = '•••••••••••• (저장됨)';
+}
+
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  updateTokenStatus(false);
+  document.getElementById('tokenInput').value = '';
+  document.getElementById('tokenInput').placeholder = 'GitHub Personal Access Token (ghp_...)';
+}
+
+function updateTokenStatus(active) {
+  const status = document.getElementById('tokenStatus');
+  const icon = document.getElementById('tokenToggleIcon');
+  if (active) {
+    status.textContent = '✅ 토큰이 저장되어 있습니다 (Private 레포 조회 가능)';
+    icon.textContent = '🔓';
+  } else {
+    status.textContent = '';
+    icon.textContent = '🔒';
+  }
+}
+
+function getAuthHeaders() {
+  const token = getStoredToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // Color palettes
 const PALETTES = {
@@ -51,7 +106,11 @@ let simulation = null;
 async function fetchWithRetry(url, retries = MAX_RETRIES) {
   for (let i = 0; i < retries; i++) {
     try {
-      const res = await fetch(url);
+      const headers = {
+        Accept: 'application/vnd.github.v3+json',
+        ...getAuthHeaders()
+      };
+      const res = await fetch(url, { headers });
       if (res.status === 403) {
         const reset = parseInt(res.headers.get('X-RateLimit-Reset') || '0') * 1000;
         const wait = Math.max(reset - Date.now(), 60000);
@@ -60,7 +119,11 @@ async function fetchWithRetry(url, retries = MAX_RETRIES) {
           continue;
         }
       }
-      if (res.status === 404) throw new Error('레포지토리를 찾을 수 없습니다');
+      if (res.status === 404) {
+        const hasToken = getStoredToken();
+        if (!hasToken) throw new Error('레포지토리를 찾을 수 없습니다. Private 레포인 경우 "Private 레포 액세스"에서 토큰을 설정해주세요.');
+        throw new Error('레포지토리를 찾을 수 없거나 토큰에 접근 권한이 없습니다.');
+      }
       if (!res.ok) throw new Error(`API 오류: ${res.status}`);
       return await res.json();
     } catch (e) {
@@ -599,6 +662,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('repoInput').value = hash;
     loadConstellation();
   }
+
+  // Check saved token on load
+  if (getStoredToken()) updateTokenStatus(true);
 
   // Override renderConstellation to save data
   const originalRender = renderConstellation;
