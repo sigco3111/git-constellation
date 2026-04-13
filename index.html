@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Git Constellation 🌌</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌌</text></svg>">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>🌌 Git Constellation</h1>
+      <p class="subtitle">GitHub 커밋 히스토리를 별자리로 시각화합니다</p>
+    </header>
+
+    <div class="search-section">
+      <div class="input-group">
+        <input type="text" id="repoInput" placeholder="사용자명/레포 (예: sigco3111/hermes_bot)" />
+        <button id="searchBtn" onclick="loadConstellation()">
+          <span class="btn-icon">✨</span>
+          <span class="btn-text">생성</span>
+        </button>
+      </div>
+      <div class="options">
+        <div class="option-group">
+          <label>기간</label>
+          <select id="periodSelect">
+            <option value="month">최근 1개월</option>
+            <option value="quarter">최근 3개월</option>
+            <option value="year" selected>최근 1년</option>
+            <option value="all">전체</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>레이아웃</label>
+          <select id="layoutSelect">
+            <option value="force" selected>Force-directed</option>
+            <option value="radial">Radial</option>
+            <option value="timeline">Timeline</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>색상 모드</label>
+          <select id="colorModeSelect">
+            <option value="activity" selected>활동량</option>
+            <option value="filetype">파일 유형</option>
+            <option value="aurora">오로라</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-bar" id="statsBar" style="display:none;">
+      <div class="stat"><span class="stat-value" id="totalCommits">0</span><span class="stat-label">커밋</span></div>
+      <div class="stat"><span class="stat-value" id="totalStars">0</span><span class="stat-label">별</span></div>
+      <div class="stat"><span class="stat-value" id="totalContributors">0</span><span class="stat-label">기여자</span></div>
+      <div class="stat"><span class="stat-value" id="totalLines">0</span><span class="stat-label">변경 라인</span></div>
+    </div>
+
+    <div id="loading" class="loading" style="display:none;">
+      <div class="loader">
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <p>별자리를 생성하고 있습니다...</p>
+      </div>
+    </div>
+
+    <div id="error" class="error" style="display:none;"></div>
+
+    <div id="canvas-container">
+      <svg id="constellation"></svg>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <div class="legend" id="legend" style="display:none;">
+      <h3>🌌 별자리 해석</h3>
+      <div id="legendContent"></div>
+    </div>
+
+    <footer>
+      <p>Made with ✨ by ICBM2 | <a href="https://github.com/sigco3111/git-constellation" target="_blank">GitHub</a></p>
+    </footer>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
