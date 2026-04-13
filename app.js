@@ -118,6 +118,7 @@ async function fetchWithRetry(url, retries = MAX_RETRIES) {
           await new Promise(r => setTimeout(r, wait));
           continue;
         }
+        throw new Error('GitHub API rate limit에 도달했습니다. 잠시 후 다시 시도해주세요.');
       }
       if (res.status === 404) {
         const hasToken = getStoredToken();
@@ -150,95 +151,44 @@ async function fetchAllCommits(owner, repo, since) {
     page++;
 
     // Rate limit courtesy
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 300));
   }
 
   const raw = commits.slice(0, MAX_COMMITS);
 
-  if (raw.length === 0) return raw;
-
-  // compare API로 청크별 통계 수집 (API 호출 최소화)
-  // 10개 커밋 단위로 compare → 파일 목록 + stats 확보
-  const CHUNK = 10;
-  const chunkStats = {};
-
-  for (let i = 0; i < raw.length; i += CHUNK) {
-    const chunk = raw.slice(i, i + CHUNK);
-    if (chunk.length < 2) {
-      // 단일 커밋은 compare 불가 → 메시지 기반 추정
-      chunk.forEach((c, j) => {
-        chunkStats[i + j] = estimateStatsFromMessage(c);
-      });
-      continue;
-    }
-
-    const baseSha = chunk[chunk.length - 1].sha;
-    const headSha = chunk[0].sha;
-
-    try {
-      const compare = await fetchWithRetry(
-        `${GITHUB_API}/repos/${owner}/${repo}/compare/${baseSha}...${headSha}`
-      );
-
-      if (compare && compare.files) {
-        // 파일별 커밋 귀속 — 단순히 균등 분배
-        const filesPerCommit = compare.files.length / chunk.length;
-        const totalAdds = compare.stats?.additions || 0;
-        const totalDels = compare.stats?.deletions || 0;
-        const addsPerCommit = totalAdds / chunk.length;
-        const delsPerCommit = totalDels / chunk.length;
-
-        chunk.forEach((c, j) => {
-          const startIdx = Math.floor(j * filesPerCommit);
-          const endIdx = Math.floor((j + 1) * filesPerCommit);
-          const assignedFiles = compare.files.slice(startIdx, endIdx);
-
-          const fileTypeCount = {};
-          let add = 0, del = 0;
-          assignedFiles.forEach(f => {
-            add += f.additions || 0;
-            del += f.deletions || 0;
-            const ext = '.' + (f.filename.split('.').pop() || '').toLowerCase();
-            fileTypeCount[ext] = (fileTypeCount[ext] || 0) + 1;
-          });
-          const dominant = Object.entries(fileTypeCount).sort((a, b) => b[1] - a[1])[0];
-
-          chunkStats[i + j] = {
-            additions: Math.round(add || addsPerCommit),
-            deletions: Math.round(del || delsPerCommit),
-            dominantType: dominant ? dominant[0] : null,
-            fileCount: assignedFiles.length
-          };
-        });
-      }
-    } catch (e) {
-      // compare 실패 시 메시지 기반 추정
-      chunk.forEach((c, j) => {
-        chunkStats[i + j] = estimateStatsFromMessage(c);
-      });
-    }
-
-    await new Promise(r => setTimeout(r, 150));
-  }
-
-  // 병합
+  // 각 커밋에 스마트 추정치 부여 (추가 API 호출 없음)
   raw.forEach((c, i) => {
-    const s = chunkStats[i];
-    if (s) {
-      c.stats = { additions: s.additions, deletions: s.deletions };
-      if (s.dominantType) {
-        c.files = [{ filename: 'dummy' + s.dominantType, additions: s.additions, deletions: s.deletions }];
-        c._dominantType = s.dominantType;
-      } else {
-        c.files = [];
-      }
-    } else {
-      c.stats = estimateStatsFromMessage(c);
-      c.files = [];
-    }
+    const est = estimateStatsFromMessage(c);
+    c.stats = { additions: est.additions, deletions: est.deletions };
+    c.files = extractFilesFromMessage(c);
   });
 
   return raw;
+}
+
+function extractFilesFromMessage(commit) {
+  const msg = (commit.commit?.message || '').toLowerCase();
+  const files = [];
+  // 메시지에서 파일 확장자 힌트 추출
+  const extPatterns = [
+    { ext: '.js', keywords: ['javascript', ' js ', '.js', 'webpack', 'babel', 'eslint'] },
+    { ext: '.ts', keywords: ['typescript', ' ts ', '.ts', 'tsx'] },
+    { ext: '.py', keywords: ['python', ' py ', '.py', 'pip', 'pytest'] },
+    { ext: '.html', keywords: ['html', 'template', 'index.html'] },
+    { ext: '.css', keywords: ['css', 'style', 'scss', 'tailwind', '.css'] },
+    { ext: '.md', keywords: ['readme', 'doc', 'markdown', '.md'] },
+    { ext: '.json', keywords: ['json', 'package.json', 'config'] },
+    { ext: '.yml', keywords: ['yaml', 'yml', 'ci/cd', 'github action', 'workflow'] },
+    { ext: '.rs', keywords: ['rust', 'cargo', '.rs'] },
+    { ext: '.go', keywords: ['golang', ' go ', '.go'] },
+    { ext: '.swift', keywords: ['swift', 'xcode', '.swift'] },
+  ];
+  for (const { ext, keywords } of extPatterns) {
+    if (keywords.some(k => msg.includes(k))) {
+      files.push({ filename: 'dummy' + ext, additions: 10, deletions: 5 });
+    }
+  }
+  return files;
 }
 
 function estimateStatsFromMessage(commit) {
@@ -286,7 +236,7 @@ function processCommits(commits) {
       additions: stats.additions || 0,
       deletions: stats.deletions || 0,
       totalChanges,
-      dominantType: dominantType ? dominantType[0] : (c._dominantType || '.unknown'),
+      dominantType: dominantType ? dominantType[0] : '.unknown',
       fileCount: files.length,
       url: c.html_url
     };
