@@ -281,6 +281,7 @@ function renderConstellation(processed, connections) {
   feMerge2.append('feMergeNode').attr('in', 'SourceGraphic');
 
   // Nebula gradients
+  const nebulaG = svg.append('g');
   for (let i = 0; i < 3; i++) {
     const grad = defs.append('radialGradient')
       .attr('id', `nebula-${i}`)
@@ -293,7 +294,7 @@ function renderConstellation(processed, connections) {
 
   // Nebula background
   for (let i = 0; i < 3; i++) {
-    svg.append('circle')
+    nebulaG.append('circle')
       .attr('class', 'nebula')
       .attr('cx', width * (0.3 + i * 0.2))
       .attr('cy', height * (0.2 + i * 0.3))
@@ -308,9 +309,10 @@ function renderConstellation(processed, connections) {
     size: getSize(c)
   }));
 
-  const links = connections.filter(c =>
-    nodes.find(n => n.id === c.source) && nodes.find(n => n.id === c.target)
-  );
+  // Deep clone connections to avoid forceLink mutation
+  const links = connections
+    .filter(c => nodes.find(n => n.id === c.source) && nodes.find(n => n.id === c.target))
+    .map(c => ({ source: c.source, target: c.target, type: c.type }));
 
   // Calculate positions based on layout
   if (layout === 'radial') {
@@ -336,9 +338,8 @@ function renderConstellation(processed, connections) {
   }
 
   // Force simulation (for force layout, or just use calculated positions)
+  if (simulation) simulation.stop();
   if (layout === 'force') {
-    if (simulation) simulation.stop();
-
     simulation = d3.forceSimulation(nodes)
       .force('link', d3.forceLink(links).id(d => d.id).distance(30).strength(0.1))
       .force('charge', d3.forceManyBody().strength(-5))
@@ -348,8 +349,11 @@ function renderConstellation(processed, connections) {
       .force('y', d3.forceY(height / 2).strength(0.02));
   }
 
+  // Main group for all visual elements (zoom target)
+  const mainG = svg.append('g').attr('id', 'main-group');
+
   // Draw links
-  const link = svg.append('g')
+  const link = mainG.append('g')
     .selectAll('line')
     .data(links)
     .join('line')
@@ -358,7 +362,7 @@ function renderConstellation(processed, connections) {
     .attr('stroke-width', d => d.type === 'author' ? 1 : 0.5);
 
   // Draw stars
-  const node = svg.append('g')
+  const node = mainG.append('g')
     .selectAll('g')
     .data(nodes)
     .join('g')
@@ -442,15 +446,13 @@ function renderConstellation(processed, connections) {
     node.attr('transform', d => `translate(${d.x},${d.y})`);
   }
 
-  // Zoom & pan
+  // Zoom & pan on main group
   const zoom = d3.zoom()
     .scaleExtent([0.3, 5])
     .on('zoom', (e) => {
-      svg.select('g').attr('transform', e.transform);
+      mainG.attr('transform', e.transform);
     });
 
-  // Re-wrap all visual elements in a group for zoom
-  const mainGroup = svg.selectAll('g');
   svg.call(zoom);
 
   // Update legend
