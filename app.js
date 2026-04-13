@@ -572,13 +572,23 @@ function animateCounter(id, target) {
 
 // === Main ===
 async function loadConstellation() {
-  const input = document.getElementById('repoInput').value.trim();
-  if (!input) {
+  const input = document.getElementById('repoInput');
+  let value = input.value.trim();
+
+  // 빈 입력이면 플레이스홀더에서 레포명 추출
+  if (!value) {
+    const ph = input.placeholder;
+    const match = ph.match(/\((?:예:\s*)?(.+?)\)/);
+    if (match) value = match[1].trim();
+    input.value = value;
+  }
+
+  if (!value) {
     showError('레포지토리를 입력해주세요 (예: sigco3111/hermes_bot)');
     return;
   }
 
-  const [owner, repo] = input.split('/');
+  const [owner, repo] = value.split('/');
   if (!owner || !repo) {
     showError('올바른 형식으로 입력해주세요 (사용자명/레포)');
     return;
