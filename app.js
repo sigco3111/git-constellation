@@ -351,14 +351,13 @@ function renderConstellation(processed, connections) {
       .attr('fill', `url(#nebula-${i})`);
   }
 
-  // Prepare nodes with positions
+  // Deep clone processed and connections to avoid any mutation
   const nodes = processed.map(c => ({
     ...c,
     color: getColor(c, colorMode),
     size: getSize(c)
   }));
 
-  // Deep clone connections to avoid forceLink mutation
   const links = connections
     .filter(c => nodes.find(n => n.id === c.source) && nodes.find(n => n.id === c.target))
     .map(c => ({ source: c.source, target: c.target, type: c.type }));
@@ -420,12 +419,14 @@ function renderConstellation(processed, connections) {
     .selectAll('g')
     .data(nodes)
     .join('g')
-    .attr('class', 'star-node')
-    .call(layout === 'force' ? d3.drag()
+    .attr('class', 'star-node');
+
+  if (layout === 'force') {
+    node.call(d3.drag()
       .on('start', (e, d) => { if (simulation) { d.fx = d.x; d.fy = d.y; } })
       .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
-      .on('end', (e, d) => { if (simulation) { d.fx = null; d.fy = null; } })
-    : null);
+      .on('end', (e, d) => { if (simulation) { d.fx = null; d.fy = null; } }));
+  }
 
   // Star glow
   node.append('circle')
