@@ -150,48 +150,108 @@ async function fetchAllCommits(owner, repo, since) {
     page++;
 
     // Rate limit courtesy
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 200));
   }
 
   const raw = commits.slice(0, MAX_COMMITS);
 
-  // 커밋 목록 API는 stats/files를 반환하지 않으므로 샘플링하여 개별 조회
-  // 최대 100개까지만 상세 조회 (rate limit 방지)
-  const detailLimit = Math.min(raw.length, 100);
-  const step = Math.max(1, Math.floor(raw.length / detailLimit));
-  const indices = [];
-  for (let i = 0; i < raw.length; i += step) indices.push(i);
-  // 항상 마지막 커밋 포함
-  if (indices[indices.length - 1] !== raw.length - 1) indices.push(raw.length - 1);
+  if (raw.length === 0) return raw;
 
-  const detailMap = {};
-  for (const idx of indices) {
+  // compare API로 청크별 통계 수집 (API 호출 최소화)
+  // 10개 커밋 단위로 compare → 파일 목록 + stats 확보
+  const CHUNK = 10;
+  const chunkStats = {};
+
+  for (let i = 0; i < raw.length; i += CHUNK) {
+    const chunk = raw.slice(i, i + CHUNK);
+    if (chunk.length < 2) {
+      // 단일 커밋은 compare 불가 → 메시지 기반 추정
+      chunk.forEach((c, j) => {
+        chunkStats[i + j] = estimateStatsFromMessage(c);
+      });
+      continue;
+    }
+
+    const baseSha = chunk[chunk.length - 1].sha;
+    const headSha = chunk[0].sha;
+
     try {
-      const detail = await fetchWithRetry(raw[idx].url);
-      if (detail) detailMap[idx] = detail;
-    } catch (e) { /* skip failed */ }
-    await new Promise(r => setTimeout(r, 50));
+      const compare = await fetchWithRetry(
+        `${GITHUB_API}/repos/${owner}/${repo}/compare/${baseSha}...${headSha}`
+      );
+
+      if (compare && compare.files) {
+        // 파일별 커밋 귀속 — 단순히 균등 분배
+        const filesPerCommit = compare.files.length / chunk.length;
+        const totalAdds = compare.stats?.additions || 0;
+        const totalDels = compare.stats?.deletions || 0;
+        const addsPerCommit = totalAdds / chunk.length;
+        const delsPerCommit = totalDels / chunk.length;
+
+        chunk.forEach((c, j) => {
+          const startIdx = Math.floor(j * filesPerCommit);
+          const endIdx = Math.floor((j + 1) * filesPerCommit);
+          const assignedFiles = compare.files.slice(startIdx, endIdx);
+
+          const fileTypeCount = {};
+          let add = 0, del = 0;
+          assignedFiles.forEach(f => {
+            add += f.additions || 0;
+            del += f.deletions || 0;
+            const ext = '.' + (f.filename.split('.').pop() || '').toLowerCase();
+            fileTypeCount[ext] = (fileTypeCount[ext] || 0) + 1;
+          });
+          const dominant = Object.entries(fileTypeCount).sort((a, b) => b[1] - a[1])[0];
+
+          chunkStats[i + j] = {
+            additions: Math.round(add || addsPerCommit),
+            deletions: Math.round(del || delsPerCommit),
+            dominantType: dominant ? dominant[0] : null,
+            fileCount: assignedFiles.length
+          };
+        });
+      }
+    } catch (e) {
+      // compare 실패 시 메시지 기반 추정
+      chunk.forEach((c, j) => {
+        chunkStats[i + j] = estimateStatsFromMessage(c);
+      });
+    }
+
+    await new Promise(r => setTimeout(r, 150));
   }
 
-  // 상세 데이터를 원본에 병합
+  // 병합
   raw.forEach((c, i) => {
-    const detail = detailMap[i];
-    if (detail) {
-      c.stats = detail.stats || {};
-      c.files = detail.files || [];
-    }
-    // 샘플링되지 않은 커밋은 메시지 길이로 추정치 부여
-    if (!c.stats) {
-      const msgLen = c.commit?.message?.length || 10;
-      c.stats = {
-        additions: Math.floor(msgLen * 0.5 + Math.random() * 20),
-        deletions: Math.floor(msgLen * 0.2 + Math.random() * 10)
-      };
+    const s = chunkStats[i];
+    if (s) {
+      c.stats = { additions: s.additions, deletions: s.deletions };
+      if (s.dominantType) {
+        c.files = [{ filename: 'dummy' + s.dominantType, additions: s.additions, deletions: s.deletions }];
+        c._dominantType = s.dominantType;
+      } else {
+        c.files = [];
+      }
+    } else {
+      c.stats = estimateStatsFromMessage(c);
       c.files = [];
     }
   });
 
   return raw;
+}
+
+function estimateStatsFromMessage(commit) {
+  const msg = commit.commit?.message || '';
+  const msgLen = msg.length;
+  // PR merge 커밋은 보통 큼
+  const isMerge = msg.toLowerCase().includes('merge');
+  const isRelease = msg.toLowerCase().includes('release') || msg.toLowerCase().includes('bump');
+  const base = isMerge ? 150 : isRelease ? 80 : 15;
+  const variance = isMerge ? 200 : isRelease ? 100 : 25;
+  const additions = Math.floor(base + Math.random() * variance + msgLen * 0.3);
+  const deletions = Math.floor(base * 0.4 + Math.random() * variance * 0.5 + msgLen * 0.15);
+  return { additions, deletions };
 }
 
 async function fetchRepoInfo(owner, repo) {
@@ -226,7 +286,7 @@ function processCommits(commits) {
       additions: stats.additions || 0,
       deletions: stats.deletions || 0,
       totalChanges,
-      dominantType: dominantType ? dominantType[0] : '.unknown',
+      dominantType: dominantType ? dominantType[0] : (c._dominantType || '.unknown'),
       fileCount: files.length,
       url: c.html_url
     };
