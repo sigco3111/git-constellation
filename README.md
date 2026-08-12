@@ -15,7 +15,7 @@ GitHub 커밋 히스토리를 별자리처럼 시각화하는 웹 프로젝트�
 
 ## 🚀 사용법
 
-1. [git-constellation.vercel.app](https://git-constellation.vercel.app) 접속
+1. [sigco3111.github.io/git-constellation](https://sigco3111.github.io/git-constellation) 접속
 2. `사용자명/레포` 형식으로 입력 (예: `torvalds/linux`)
 3. 기간, 레이아웃, 색상 모드 선택
 4. 별자리 탐색!
