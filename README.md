@@ -15,7 +15,11 @@ GitHub 커밋 히스토리를 별자리처럼 시각화하는 웹 프로젝트�
 
 ## 🚀 사용법
 
-1. [sigco3111.github.io/git-constellation](https://sigco3111.github.io/git-constellation) 접속
+라이브 데모 : https://sigco3111.github.io/git-constellation/
+
+[![Live Demo](https://img.shields.io/badge/Live_Demo-GitHub%20Pages-222222?style=for-the-badge&logo=githubpages&logoColor=white)](https://sigco3111.github.io/git-constellation/)
+
+1. 위 라이브 데모에 접속
 2. `사용자명/레포` 형식으로 입력 (예: `torvalds/linux`)
 3. 기간, 레이아웃, 색상 모드 선택
 4. 별자리 탐색!
@@ -24,7 +28,7 @@ GitHub 커밋 히스토리를 별자리처럼 시각화하는 웹 프로젝트�
 
 - **D3.js** — 시각화 엔진
 - **GitHub REST API** — 커밋 데이터 수집
-- **Vercel** — 배포
+- **GitHub Pages** — 배포 (Vercel → Pages 전환 2026-08, `vercel.json`은 과거 배포 이력 보존 차원에서 그대로 유지)
 - 순수 HTML/CSS/JS — 프레임워크 없음
 
 ## 🌌 별자리 해석
